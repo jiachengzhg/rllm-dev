@@ -1,8 +1,6 @@
 from rllm.environments.base.base_env import BaseEnv
-from rllm.environments.base.single_turn_env import SingleTurnEnvironment
-from rllm.environments.tools.tool_env import ToolEnvironment
 
-__all__ = ["BaseEnv", "SingleTurnEnvironment", "ToolEnvironment"]
+__all__ = ["BaseEnv"]
 
 
 def safe_import(module_path, class_name):
@@ -14,11 +12,7 @@ def safe_import(module_path, class_name):
 
 
 ENVIRONMENT_IMPORTS = [
-    ("rllm.environments.browsergym.browsergym", "BrowserGymEnv"),
-    ("rllm.environments.frozenlake.frozenlake", "FrozenLakeEnv"),
-    ("rllm.environments.swe.swe", "SWEEnv"),
-    ("rllm.environments.code.competition_coding", "CompetitionCodingEnv"),
-    ("rllm.environments.appworld.appworld_env", "AppWorldEnv"),
+    ("rllm.environments.openhands.oh_env", "OHEnv"),
 ]
 
 for module_path, class_name in ENVIRONMENT_IMPORTS:

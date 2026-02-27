@@ -16,8 +16,6 @@ from verl.utils.device import is_cuda_available
 from rllm.trainer.env_agent_mappings import AGENT_CLASS_MAPPING, ENV_CLASS_MAPPING
 from rllm.trainer.verl.agent_ppo_trainer import AgentPPOTrainer
 
-# Local application imports
-from rllm.trainer.verl.agent_workflow_trainer import AgentWorkflowPPOTrainer
 from rllm.trainer.verl.ray_runtime_env import get_ppo_ray_runtime_env
 
 
@@ -153,40 +151,13 @@ class TaskRunner:
         val_reward_fn = load_reward_manager(config, tokenizer, num_examine=1, **config.reward_model.get("reward_kwargs", {}))
         resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
 
-        # if config.rllm.workflow.use_workflow:
         if agent_run_func is not None:
-            print("IMPORTANT: Using AgentSdkTrainer")
-            from rllm.trainer.verl.agent_sdk_trainer import AgentSdkTrainer
-
-            trainer = AgentSdkTrainer(
-                config=config,
-                tokenizer=tokenizer,
-                role_worker_mapping=role_worker_mapping,
-                resource_pool_manager=resource_pool_manager,
-                ray_worker_group_cls=ray_worker_group_cls,
-                agent_run_func=agent_run_func,
+            raise ValueError(
+                "Slim OpenHands build does not support agent_run_func / SDK trainer."
             )
         elif workflow_class is not None:
-            workflow_args = workflow_args or {}
-            if config.rllm.workflow.get("workflow_args") is not None:
-                for key, value in config.rllm.workflow.get("workflow_args").items():
-                    if value is not None:
-                        if key in workflow_args and isinstance(workflow_args[key], dict):
-                            workflow_args[key].update(value)
-                        else:
-                            workflow_args[key] = value
-
-            trainer = AgentWorkflowPPOTrainer(
-                config=config,
-                tokenizer=tokenizer,
-                processor=processor,
-                role_worker_mapping=role_worker_mapping,
-                resource_pool_manager=resource_pool_manager,
-                ray_worker_group_cls=ray_worker_group_cls,
-                reward_fn=reward_fn,
-                val_reward_fn=val_reward_fn,
-                workflow_class=workflow_class,
-                workflow_args=workflow_args,
+            raise ValueError(
+                "Slim OpenHands build does not support workflow trainer path."
             )
 
         else:

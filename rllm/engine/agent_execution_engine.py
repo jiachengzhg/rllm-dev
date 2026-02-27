@@ -100,19 +100,8 @@ class AgentExecutionEngine:
         self.rollout_engine_args = rollout_engine_args
         self.sampling_params = kwargs.get("sampling_params", {})  # for openai api requests
 
-        assert self.engine_name in ["openai", "verl", "tinker"], "Currently only openai, verl and tinker are supported as rollout engine"
-        if self.engine_name == "openai":
-            from rllm.engine.rollout.openai_engine import OpenAIEngine
-
-            self.rollout_engine = OpenAIEngine(
-                **rollout_engine_args,
-                api_retries=api_retries,
-                tokenizer=self.tokenizer,
-                max_prompt_length=self.max_prompt_length,
-                max_response_length=self.max_response_length,
-                disable_thinking=self.disable_thinking,
-            )
-        elif self.engine_name == "verl":
+        assert self.engine_name == "verl", "Slim OpenHands build only supports 'verl' rollout engine"
+        if self.engine_name == "verl":
             from rllm.engine.rollout.verl_engine import VerlEngine
 
             self.rollout_engine = VerlEngine(
@@ -120,12 +109,6 @@ class AgentExecutionEngine:
                 rollout_manager=rollout_engine,
                 tokenizer=self.tokenizer,
                 disable_thinking=self.disable_thinking,
-            )
-        elif self.engine_name == "tinker":
-            from rllm.engine.rollout.tinker_engine import TinkerEngine
-
-            self.rollout_engine = TinkerEngine(
-                **rollout_engine_args,
             )
 
         # Create a thread pool executor for environment interactions (i.e. step, reset, close)
@@ -153,16 +136,10 @@ class AgentExecutionEngine:
         sampling_params = self.sampling_params.copy()
         sampling_params.update(kwargs)
 
-        if self.engine_name == "openai":
-            output = await self.rollout_engine.get_model_response(prompt, application_id=application_id, enforce_max_prompt_length=False, **sampling_params)
-            return output
-        elif self.engine_name == "verl":
+        if self.engine_name == "verl":
             meta_data = sampling_params.pop("meta_info", {})
             validate = meta_data.get("validate", False)
             output = await self.rollout_engine.get_model_response(prompt, application_id=application_id, validate=validate, enforce_max_prompt_length=False, **sampling_params)
-            return output
-        elif self.engine_name == "tinker":
-            output = await self.rollout_engine.get_model_response(prompt, application_id=application_id, enforce_max_prompt_length=False, **sampling_params)
             return output
         else:
             raise NotImplementedError(f"Engine type '{self.engine_name}' not supported")
