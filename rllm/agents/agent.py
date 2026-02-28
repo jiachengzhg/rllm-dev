@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from rllm.engine.rollout import ModelOutput
-    from rllm.workflows.workflow import TerminationReason
 
 
 @dataclass
@@ -154,70 +153,6 @@ class Trajectory:
                     return False
             prev = step
         return True
-
-
-@dataclass
-class Episode:
-    id: str = ""  # rollout id e.g., task_id:rollout_idx
-    task: Any = None
-    termination_reason: TerminationReason | None = None  # noqa: F821
-    is_correct: bool = False
-    trajectories: list[Trajectory] = field(default_factory=list)
-    metrics: dict = field(default_factory=dict)
-    info: dict = field(default_factory=dict)
-
-    def to_dict(self):
-        # Remove large/non-serializable payloads (e.g., images) from task
-        def _sanitize_task(task_obj):
-            if isinstance(task_obj, dict):
-                cleaned = {k: v for k, v in task_obj.items() if k not in ("image", "images")}
-                return cleaned
-            return task_obj
-
-        return {
-            "id": self.id,
-            "task": _sanitize_task(self.task),
-            "termination_reason": self.termination_reason.value if self.termination_reason is not None else None,
-            "is_correct": bool(self.is_correct),
-            "trajectories": [trajectory.to_dict() for trajectory in self.trajectories],
-            "metrics": self.metrics,
-            "info": self.info,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict) -> Episode:
-        """Create Episode from dictionary, properly deserializing Trajectory objects."""
-        from rllm.workflows.workflow import TerminationReason
-
-        return cls(
-            id=data["id"],
-            task=data["task"],
-            termination_reason=TerminationReason(data.get("termination_reason", TerminationReason.UNKNOWN)),
-            is_correct=data["is_correct"],
-            trajectories=[Trajectory.from_dict(trajectory_data) for trajectory_data in data["trajectories"]],
-            metrics=data.get("metrics", {}),
-            info=data.get("info", {}),
-        )
-
-
-@dataclass
-class TrajectoryGroup:
-    """
-    A group of trajectories for advantage computation.
-
-    Unlike Episode (which represents raw rollout data), TrajectoryGroup is specifically
-    structured for advantage computation. All trajectories in a group will have their
-    rewards compared to compute advantages (e.g., via GRPO).
-
-    Attributes:
-        trajectories: List of trajectories to compare for advantage computation
-        group_id: Optional identifier for the group (e.g., "task1:agent_0")
-        metadata: List of metadata for each trajectory in the group
-    """
-
-    trajectories: list[Trajectory]
-    group_id: str = ""
-    metadata: list[dict] = field(default_factory=list)
 
 
 class BaseAgent(ABC):

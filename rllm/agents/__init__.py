@@ -1,6 +1,6 @@
-from rllm.agents.agent import Action, BaseAgent, Episode, Step, Trajectory
+from rllm.agents.agent import Action, BaseAgent, Step, Trajectory
 
-__all__ = ["BaseAgent", "Action", "Step", "Trajectory", "Episode"]
+__all__ = ["BaseAgent", "Action", "Step", "Trajectory"]
 
 
 def safe_import(module_path, class_name):
