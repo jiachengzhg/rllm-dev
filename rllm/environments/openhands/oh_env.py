@@ -78,6 +78,7 @@ class OHEnv(BaseEnv):
         remote_api_key: str | None = None,
         use_huashan: bool = False,
         huashan_server_url: str | None = None,
+        use_gt_patch: bool = False,
     ):
         """
         Initialize the OpenHands environment.
@@ -97,6 +98,7 @@ class OHEnv(BaseEnv):
             remote_api_key: Optional API key for remote server authentication.
             use_huashan: Whether to use Huashan platform via MCP.
             huashan_server_url: URL of the Huashan MCP server.
+            use_gt_patch: Whether to apply ground-truth patch before reward computation.
         """
         # Load entry from dataset if not provided
         if entry is not None:
@@ -124,9 +126,11 @@ class OHEnv(BaseEnv):
         self.remote_api_key = remote_api_key
         self.use_huashan = use_huashan
         self.huashan_server_url = huashan_server_url
+        self.use_gt_patch = use_gt_patch
         self.total_steps = 0
         self.done = False
         self.last_test_output: str | None = None
+        self._gt_patch_applied = False
         self._task_list: list[dict[str, Any]] = []
 
         # Initialize runtime client
@@ -533,6 +537,7 @@ if __name__ == '__main__':
         self.total_steps = 0
         self.done = False
         self.last_test_output = None
+        self._gt_patch_applied = False
         self._task_list = []
 
         # Get task instruction
@@ -826,10 +831,115 @@ if __name__ == '__main__':
             return output
         return f"{output[:max_len]}\n{CLIPPED_NOTICE}"
 
+    @staticmethod
+    def _range_to_patch(range_obj: dict | None) -> str:
+        if not range_obj:
+            return "0"
+        start = range_obj.get("start", 0)
+        length = range_obj.get("length")
+        if length is None:
+            return f"{start}"
+        return f"{start},{length}"
+
+    @classmethod
+    def _parsed_commit_to_patch(cls, parsed_commit: dict) -> str:
+        file_diffs = parsed_commit.get("file_diffs", [])
+        parts: list[str] = []
+
+        for file_diff in file_diffs:
+            header = file_diff.get("header", {})
+            file_info = header.get("file", {})
+            path = file_info.get("path")
+            if not path or not path.endswith(".py"):
+                continue
+
+            parts.append(f"diff --git a/{path} b/{path}\n")
+            misc_line = header.get("misc_line")
+            if misc_line:
+                parts.append(f"{misc_line}\n")
+
+            index_line = file_diff.get("index_line")
+            if index_line:
+                old_hash = index_line.get("old_commit_hash", "")
+                new_hash = index_line.get("new_commit_hash", "")
+                mode = index_line.get("mode", "")
+                parts.append(f"index {old_hash}..{new_hash}{' ' if mode else ''}{mode}\n")
+
+            if file_diff.get("is_binary_file"):
+                binary_line = file_diff.get("binary_line")
+                if binary_line:
+                    parts.append(f"{binary_line}\n")
+
+            minus_file = file_diff.get("minus_file")
+            plus_file = file_diff.get("plus_file")
+            if minus_file and plus_file:
+                parts.append(f"--- {minus_file.get('path', '')}\n")
+                parts.append(f"+++ {plus_file.get('path', '')}\n")
+
+            for hunk in file_diff.get("hunks", []):
+                descriptor = hunk.get("descriptor", {})
+                old_range = cls._range_to_patch(descriptor.get("old_range"))
+                new_range = cls._range_to_patch(descriptor.get("new_range"))
+                section = descriptor.get("section", "")
+                header_line = f"@@ -{old_range} +{new_range} @@"
+                if section:
+                    header_line += f" {section}"
+                parts.append(f"{header_line}\n")
+
+                all_lines = hunk.get("line_group", {}).get("all_lines", [])
+                for line in all_lines:
+                    line_type = str(line.get("type", "")).lower()
+                    content = line.get("content", "")
+                    if "context" in line_type:
+                        parts.append(f" {content}\n")
+                    elif "added" in line_type:
+                        parts.append(f"+{content}\n")
+                    elif "deleted" in line_type:
+                        parts.append(f"-{content}\n")
+                    elif "note" in line_type:
+                        parts.append(f"\\ {content}\n")
+                    else:
+                        parts.append(f" {content}\n")
+
+        return "".join(parts)
+
+    def _extract_gt_patch(self) -> str:
+        # Swebench-style entries usually provide raw unified patch directly.
+        raw_patch = self.entry.get("patch") or self.entry.get("gt_patch")
+        if isinstance(raw_patch, str) and raw_patch.strip():
+            return raw_patch
+
+        # R2E-style entries may contain serialized parsed commit payload.
+        parsed_commit = self.entry.get("parsed_commit_content") or self.entry.get("parsed_commit")
+        if isinstance(parsed_commit, str):
+            try:
+                parsed_commit = json.loads(parsed_commit)
+            except json.JSONDecodeError as exc:
+                raise ValueError("parsed_commit(_content) is not valid JSON.") from exc
+        if isinstance(parsed_commit, dict):
+            patch = self._parsed_commit_to_patch(parsed_commit)
+            if patch.strip():
+                return patch
+
+        raise ValueError(
+            "GT patch not found. Expected one of: `patch`, `gt_patch`, "
+            "`parsed_commit_content`, or `parsed_commit` in dataset entry."
+        )
+
+    def _maybe_apply_gt_patch(self) -> None:
+        if not self.use_gt_patch or self._gt_patch_applied:
+            return
+        gt_patch = self._extract_gt_patch()
+        result = self.runtime_client.apply_patch(gt_patch)
+        if result.exit_code != 0:
+            raise RuntimeError(f"Failed to apply gt patch: {result.output}")
+        self._gt_patch_applied = True
+
     def compute_final_reward(self, timeout: int | None = None) -> float:
         """Compute the final reward for the task."""
         if timeout is None:
             timeout = self.reward_timeout
+        self._maybe_apply_gt_patch()
         reward = self.runtime_client.compute_reward(timeout=timeout)
         self.last_test_output = self.runtime_client.get_last_test_output()
         return reward

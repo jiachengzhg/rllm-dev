@@ -173,6 +173,7 @@ def main() -> None:
     parser.add_argument("--use-huashan", action="store_true", help="Whether to use huashan MCP runtime")
     parser.add_argument("--huashan-server-url", default=None, help="Huashan MCP server URL")
     parser.add_argument("--hello-content", default="hello world", help="Content written into /testbed/hello_world.txt")
+    parser.add_argument("--use-gt-patch", action="store_true", help="Whether to use gt patch")
     args = parser.parse_args()
 
     env_overrides = {
@@ -184,20 +185,21 @@ def main() -> None:
         "remote_api_key": args.remote_api_key,
         "use_huashan": args.use_huashan,
         "huashan_server_url": args.huashan_server_url,
+        "use_gt_patch": args.use_gt_patch,
     }
 
     output_dir = Path(args.output_dir)
     train_output = output_dir / args.train_output_name
     test_output = output_dir / args.test_output_name
 
-    # _run_single_split(
-    #     split_name="train",
-    #     parquet_path=args.train_files,
-    #     sample_index=args.train_index,
-    #     output_file=train_output,
-    #     env_overrides=env_overrides,
-    #     hello_content=args.hello_content,
-    # )
+    _run_single_split(
+        split_name="train",
+        parquet_path=args.train_files,
+        sample_index=args.train_index,
+        output_file=train_output,
+        env_overrides=env_overrides,
+        hello_content=args.hello_content,
+    )
     _run_single_split(
         split_name="test",
         parquet_path=args.test_files,

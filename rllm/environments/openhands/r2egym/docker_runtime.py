@@ -586,6 +586,8 @@ class DockerRuntime(ExecutionEnvironment):
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
             f.write(patch)
             temp_path = f.name
+        # Ensure non-root container users can read the copied patch file.
+        os.chmod(temp_path, 0o644)
         self.copy_to_container(temp_path, patch_path)
         os.unlink(temp_path)
         return self.run(f"git apply --whitespace=fix {patch_path}")

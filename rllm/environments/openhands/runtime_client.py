@@ -168,6 +168,25 @@ class RuntimeClient:
             raise RuntimeError("Runtime not connected. Call connect() first.")
         self.runtime.copy_to_container(src_path, dest_path)
 
+    def apply_patch(self, patch: str) -> CommandResult:
+        """Apply a git patch in the container."""
+        if not self._connected or self.runtime is None:
+            raise RuntimeError("Runtime not connected. Call connect() first.")
+        output, error_code = self.runtime.apply_patch(patch)
+        try:
+            if isinstance(error_code, str):
+                if error_code.isdigit():
+                    exit_code = int(error_code)
+                elif "Error" in error_code:
+                    exit_code = -1
+                else:
+                    exit_code = 0
+            else:
+                exit_code = int(error_code)
+        except (ValueError, AttributeError):
+            exit_code = -1
+        return CommandResult(output=output, exit_code=exit_code)
+
     def get_task_instruction(self) -> str:
         """Get the task instruction from the environment."""
         if not self._connected or self.runtime is None:
